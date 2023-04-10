@@ -1,9 +1,11 @@
-﻿module Dijkstra 
+﻿module Dijkstra
+
+open dijkstra
 
 type Node = A | B | C | D | E | F | G | H | I
 type Edge = Node * Node * int
 
-let findShortestPath edges start destination =
+let findShortestPath (edges:Edge list) (start:Node) (destination:Node) =
     
     let graph =
         edges
@@ -17,28 +19,35 @@ let findShortestPath edges start destination =
         |> Option.defaultValue []
     
     let rec visitNextNode unvisited visited =
-        let head = unvisited |> Map.toSeq |> Seq.sortBy snd |> Seq.tryHead          // find the node with the shortest distance to the start node 
+        let head, unvisited = unvisited |> PriorityQueue.pop                                    // find the node with the shortest distance to the start node
+        
         match head with
-        | None -> visited                                                           // If we don't have any more nodes to process, we have processed the entire reachable graph
-        | Some (node, distance) ->
-            let visited' = Map.add node distance visited                            // Add the node to the list of visited nodes
-            
-            let edges =                                                             // Find the edges of this node 
-                edgesOf node 
-                |> Seq.filter (fst >> visited.ContainsKey >> not)         // Remove visited nodes from edge list
-                |> Seq.map (fun (n, weight) -> n, distance + weight)                // Add current distance to weight to find total distance from start node through current node 
-            
-            let getBestDistance distance =                                          // Function to determine if we have a better path to a current node than previous 
-                function
-                    | Some value when distance >= value -> Some value               // existing distance is better than the new one
-                    | _ -> Some distance                                            // We don't have a path to this node yet, or existing distance is worse than new 
-            
-            let unvisited' =
-                edges
-                |> Seq.fold (fun acc (n, d) -> acc |> Map.change n (getBestDistance d)) unvisited // Update unvisited map with potentially new values
-                |> Map.remove node                                                                          // Remove the currently processed node
-            
-            if node = destination then visited'                                     // If we have processed the destination we have found the optimal path
-            else visitNextNode unvisited' visited'                                  // If not, we try again untill we find the destination or we don't have any more nodes to process
+        | None -> visited                                                                       // If we don't have any more nodes to process, we have processed the entire reachable graph
+        | Some(_, node, _) when visited |> Map.containsKey node -> visitNextNode unvisited visited // Already visited this node with a shorter distance 
+        | Some (distance, node, previousNode) ->
+            let unvisited' =                                                                    // Find the edges of this node 
+                edgesOf node
+                |> Seq.filter (fst >> visited.ContainsKey >> not)                               // Remove visited nodes from edge list
+                |> Seq.fold (fun acc (n, d) -> acc |> PriorityQueue.push (d + distance, n, Some node)) unvisited      // Update unvisited map with potentially new values
+
+            let visited' = Map.add node (distance, previousNode) visited                                        // Add the node to the list of visited nodes            
+            if node = destination then visited'                                                 // If we have processed the destination we have found the optimal path
+            else visitNextNode unvisited' visited'                                              // If not, we try again untill we find the destination or we don't have any more nodes to process
     
-    visitNextNode ([start, 0] |> Map.ofList) Map.empty
+    let visitedNodes = visitNextNode ([0, start, None] |> PriorityQueue.fromList) Map.empty
+    
+    let rec retractSteps node =
+        seq {
+            match Map.tryFind node visitedNodes with
+            | None -> ()
+            | Some (_, Some prevNode) ->
+                node
+                yield! retractSteps prevNode
+            | _ ->
+                node
+        }
+        
+    match Map.tryFind destination visitedNodes with
+    | None -> Error $"No path from {start} to {destination}"
+    | Some (distance, _) ->
+        Ok (distance, visitedNodes, retractSteps destination |> Seq.rev |> Seq.toList)

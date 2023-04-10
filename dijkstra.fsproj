@@ -6,7 +6,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="PriorityQueue.fs" />
     <Compile Include="Dijkstra.fs" />
+    <Compile Include="DijkstraOld.fs" />
+    <Compile Include="Benchmarks.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
